@@ -1,0 +1,247 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Stack to create container service and run test task definition",
+  "Parameters": {
+    "AppImage": {
+      "Type": "String",
+      "Description": "The image to run for the app task definition"
+    },
+    "KeyName": {
+      "Type": "String",
+      "Description": "Name of an existing EC2 KeyPair to enable SSH access to the ECS instances"
+    },
+    "SubnetID": {
+      "Type": "String",
+      "Description": "an existing subnet ID to use for the container instances"
+    },
+    "DesiredCapacity": {
+      "Type": "Number",
+      "Default": "1",
+      "Description": "Number of instances to launch in your ECS cluster"
+    },
+    "InstanceType": {
+      "Description": "The EC2 instance type",
+      "Type": "String",
+      "Default": "t2.micro",
+      "ConstraintDescription": "must be a valid EC2 instance type"
+    },
+    "taskInstanceName": {
+      "Description": "Value for Name tag on instance",
+      "Type": "String"
+    },
+    "taskEnvironmentName": {
+      "Description": "Value for env tag on instance",
+      "Type": "String"
+    },
+    "CIDRToWhitelistForSSH": {
+      "Description": " The IP address range that can be used to SSH to the EC2 instances",
+      "Type": "String",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+    },
+    "CIDRToWhitelistForHTTP": {
+      "Description": " The IP address range that can be used to access the app via HTTP",
+      "Type": "String",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+    },
+    "VPCId": {
+      "Description": "Physical Id of the Vpc",
+      "Type": "String"
+    }
+  },
+
+  "Outputs": {
+    "TaskInstancePublicDNSName": {
+      "Description": "Public DNS name for the instance running the task",
+      "Value": {"Fn::GetAtt": ["ContainerInstance", "PublicDnsName"]}
+    }
+  },
+
+  "Mappings": {
+    "AWSRegionToAMI": {
+      "us-west-2": {
+        "AMIID": "ami-db0306eb"
+      },
+      "eu-west-1": {
+        "AMIID": "ami-7948320e"
+      }
+    }
+  },
+
+  "Resources": {
+    "clogsTaskDefinition": {
+      "Type": "AWS::ECS::TaskDefinition",
+      "Properties": {
+        "ContainerDefinitions": [{
+          "Name": "clogs",
+          "Cpu": "512",
+          "Memory": "768",
+          "Essential": "true",
+          "Image": {
+            "Ref": "AppImage"
+          },
+          "PortMappings": [{
+            "HostPort": 80,
+            "ContainerPort": 8080
+          }]
+        }]
+      }
+    },
+    "service": {
+      "Type": "AWS::ECS::Service",
+      "Properties": {
+        "DesiredCount": "1",
+        "TaskDefinition": {
+          "Ref": "clogsTaskDefinition"
+        }
+      }
+    },
+    "ContainerInstance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "IamInstanceProfile": {
+          "Ref": "EC2InstanceProfile"
+        },
+        "ImageId": {
+          "Fn::FindInMap": ["AWSRegionToAMI", {
+            "Ref": "AWS::Region"
+          }, "AMIID"]
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "KeyName": {
+          "Ref": "KeyName"
+        },
+        "Tags": [{
+          "Key": "Name",
+          "Value": {
+            "Ref": "taskInstanceName"
+          }
+        }, {
+          "Key": "env",
+          "Value": {
+            "Ref": "taskEnvironmentName"
+          }
+        }],
+        "NetworkInterfaces": [{
+          "AssociatePublicIpAddress": "true",
+          "DeviceIndex": "0",
+          "SubnetId": {
+            "Ref": "SubnetID"
+          },
+          "GroupSet": [{
+            "Ref": "ECSSecurityGroup"
+          }]
+        }]
+      }
+    },
+    "ECSSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Enable HTTP access to all, enable SSH to whitelisted CIDR",
+        "SecurityGroupIngress": [{
+          "IpProtocol": "tcp",
+          "FromPort": "22",
+          "ToPort": "22",
+          "CidrIp": {
+            "Ref": "CIDRToWhitelistForSSH"
+          }
+        }, {
+          "IpProtocol": "tcp",
+          "FromPort": "80",
+          "ToPort": "80",
+          "CidrIp": {
+            "Ref": "CIDRToWhitelistForHTTP"
+          }
+        }],
+        "VpcId": {
+          "Ref": "VPCId"
+        }
+      }
+    },
+    "ECSServiceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": {
+              "Service": [
+                "ecs.amazonaws.com"
+              ]
+            },
+            "Action": [
+              "sts:AssumeRole"
+            ]
+          }]
+        },
+        "Path": "/",
+        "Policies": [{
+          "PolicyName": "ecs-service",
+          "PolicyDocument": {
+            "Statement": [{
+              "Effect": "Allow",
+              "Action": [
+                "elasticloadbalancing:Describe*",
+                "elasticloadbalancing:DeregisterInstancesFromLoadBalancer",
+                "elasticloadbalancing:RegisterInstancesWithLoadBalancer",
+                "ec2:Describe*",
+                "ec2:AuthorizeSecurityGroupIngress"
+              ],
+              "Resource": "*"
+            }]
+          }
+        }]
+      }
+    },
+    "EC2Role": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": {
+              "Service": [
+                "ec2.amazonaws.com"
+              ]
+            },
+            "Action": [
+              "sts:AssumeRole"
+            ]
+          }]
+        },
+        "Path": "/",
+        "Policies": [{
+          "PolicyName": "ecs-service",
+          "PolicyDocument": {
+            "Statement": [{
+              "Effect": "Allow",
+              "Action": [
+                "ecs:CreateCluster",
+                "ecs:RegisterContainerInstance",
+                "ecs:DeregisterContainerInstance",
+                "ecs:DiscoverPollEndpoint",
+                "ecs:Submit*",
+                "ecs:Poll"
+              ],
+              "Resource": "*"
+            }]
+          }
+        }]
+      }
+    },
+    "EC2InstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [{
+          "Ref": "EC2Role"
+        }]
+      }
+    }
+  }
+}

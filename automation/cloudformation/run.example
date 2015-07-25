@@ -16,4 +16,8 @@ $ aws --profile ee cloudformation describe-stacks --stack-name run-clogs-task
 # Delete stack
 $ aws --profile ee cloudformation delete-stack --stack-name run-clogs-task
 
+# Create CNAME to send traffic to task app
+$ automation/create_app_dns_name profile fqdn points-to hosted-zone-id path-to-change-set
+
 # Update stack
+$ aws --profile ee cloudformation update-stack --stack-name run-clogs-task --template-body file:///home/kris/dev/cloud/clogs/automation/cloudformation/ecs.json --parameters ParameterKey=taskInstanceName,ParameterValue=clogs-container-qa ParameterKey=VPCId,ParameterValue=vpc-7586341e ParameterKey=SubnetID,ParameterValue=subnet-4a863421 ParameterKey=CIDRToWhitelistForHTTP,ParameterValue=114.143.93.61/32 ParameterKey=taskEnvironmentName,ParameterValue=env ParameterKey=CIDRToWhitelistForSSH,ParameterValue=114.143.93.61/32 ParameterKey=AppImage,ParameterValue=krishnanmani/clogs:5 ParameterKey=KeyName,ParameterValue=clogs-key-pair --capabilities CAPABILITY_IAM

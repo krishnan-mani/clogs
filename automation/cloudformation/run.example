@@ -1,0 +1,19 @@
+# Create key-pair, make sure to save the private key, create an entry in ~/.ssh/config to use this key-pair as appropriate
+$ aws --profile ee ec2 create-key-pair --key-name clogs-key-pair
+
+# List VPC subnets
+$ aws --profile ee ec2 describe-subnets
+
+# Validate stack template
+$ aws cloudformation validate-template --template-body file:///home/kris/dev/cloud/clogs/automation/cloudformation/ecs.json
+
+# Create stack
+$ aws --profile ee cloudformation create-stack --stack-name run-clogs-task --template-body file:///home/kris/dev/cloud/clogs/automation/cloudformation/ecs.json --parameters ParameterKey=taskInstanceName,ParameterValue=clogs-container-qa ParameterKey=VPCId,ParameterValue=vpc-7586341e ParameterKey=SubnetID,ParameterValue=subnet-4a863421 ParameterKey=CIDRToWhitelistForHTTP,ParameterValue=114.143.93.61/32 ParameterKey=taskEnvironmentName,ParameterValue=env ParameterKey=CIDRToWhitelistForSSH,ParameterValue=114.143.93.61/32 ParameterKey=AppImage,ParameterValue=krishnanmani/clogs:5 ParameterKey=KeyName,ParameterValue=clogs-key-pair --capabilities CAPABILITY_IAM
+
+# Describe stack
+$ aws --profile ee cloudformation describe-stacks --stack-name run-clogs-task
+
+# Delete stack
+$ aws --profile ee cloudformation delete-stack --stack-name run-clogs-task
+
+# Update stack
